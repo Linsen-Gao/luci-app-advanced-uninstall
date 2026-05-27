@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-advanced-uninstall
-PKG_VERSION:=1.0.0
+PKG_VERSION:=2.0.0
 PKG_RELEASE:=1
 
 PKG_MAINTAINER:=Your Name <your-email@example.com>
@@ -13,13 +13,16 @@ define Package/$(PKG_NAME)
   SECTION:=luci
   CATEGORY:=LuCI
   TITLE:=LuCI Advanced Uninstall Manager
-  DEPENDS:=+luci-base +rpcd +opkg +luci-lua-runtime
+  DEPENDS:=+luci-base +rpcd
   PKGARCH:=all
+  EXTRA_DEPENDS:=@(PACKAGE_opkg||PACKAGE_apk)
 endef
 
 define Package/$(PKG_NAME)/description
   LuCI interface for advanced package uninstall management with
   Docker container cleanup, dependency tracking, and more.
+  
+  Compatible with OpenWrt 23.05+ (opkg) and 25.xx+ (apk)
 endef
 
 define Build/Prepare
