@@ -1,4 +1,4 @@
-name: Build IPK/APK Package
+name: Build IPK Package
 
 on:
   push:
@@ -9,199 +9,167 @@ on:
     branches: [ main, master ]
 
 jobs:
-  build-23-05:
-    name: Build for OpenWrt 23.05 (opkg)
+  build:
+    name: Build Package
     runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Setup OpenWrt SDK (23.05)
-      run: |
-        wget -q https://downloads.openwrt.org/releases/23.05.3/targets/x86/64/openwrt-sdk-23.05.3-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
-        tar -xf openwrt-sdk-*.tar.xz
-        mv openwrt-sdk-* openwrt-sdk-23.05
-        cd openwrt-sdk-23.05
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
-        
-    - name: Copy package to SDK
-      run: |
-        mkdir -p openwrt-sdk-23.05/feeds/luci/applications/luci-app-advanced-uninstall
-        cp -r src/* openwrt-sdk-23.05/feeds/luci/applications/luci-app-advanced-uninstall/
-        cp Makefile openwrt-sdk-23.05/feeds/luci/applications/luci-app-advanced-uninstall/
-        
-    - name: Build package (23.05)
-      run: |
-        cd openwrt-sdk-23.05
-        make defconfig
-        make package/luci-app-advanced-uninstall/compile V=s
-        
-    - name: Find IPK file
-      id: find_ipk_23
-      run: |
-        IPK_FILE=$(find openwrt-sdk-23.05/bin -name "luci-app-advanced-uninstall*.ipk" | head -1)
-        echo "ipk_file=$IPK_FILE" >> $GITHUB_OUTPUT
-        echo "Found IPK: $IPK_FILE"
-        
-    - name: Upload 23.05 artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: package-23.05-opkg
-        path: ${{ steps.find_ipk_23.outputs.ipk_file }}
-
-  build-24-10:
-    name: Build for OpenWrt 24.10 (apkg)
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup OpenWrt SDK (24.10)
-      run: |
-        wget -q https://downloads.openwrt.org/releases/24.10.0/targets/x86/64/openwrt-sdk-24.10.0-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.xz
-        tar -xf openwrt-sdk-*.tar.xz
-        mv openwrt-sdk-* openwrt-sdk-24.10
-        cd openwrt-sdk-24.10
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
-        
-    - name: Copy package to SDK
-      run: |
-        mkdir -p openwrt-sdk-24.10/feeds/luci/applications/luci-app-advanced-uninstall
-        cp -r src/* openwrt-sdk-24.10/feeds/luci/applications/luci-app-advanced-uninstall/
-        cp Makefile openwrt-sdk-24.10/feeds/luci/applications/luci-app-advanced-uninstall/
-        
-    - name: Build package (24.10)
-      run: |
-        cd openwrt-sdk-24.10
-        make defconfig
-        make package/luci-app-advanced-uninstall/compile V=s
-        
-    - name: Find IPK file
-      id: find_ipk_24
-      run: |
-        IPK_FILE=$(find openwrt-sdk-24.10/bin -name "luci-app-advanced-uninstall*.ipk" | head -1)
-        echo "ipk_file=$IPK_FILE" >> $GITHUB_OUTPUT
-        echo "Found IPK: $IPK_FILE"
-        
-    - name: Upload 24.10 artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: package-24.10
-        path: ${{ steps.find_ipk_24.outputs.ipk_file }}
-
-  create-installer:
-    name: Create Makeself Installer
-    needs: [build-23-05]
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Download artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: package-23.05-opkg
-        path: ./artifacts
-        
-    - name: Create Makeself installer
+    - name: Install dependencies
       run: |
         sudo apt-get update
+        sudo apt-get install -y build-essential ccache ecj fastjar file g++ gawk \
+          gettext git java-propose-classpath libelf-dev libncurses5-dev \
+          libncursesw5-dev libssl-dev python3 unzip wget rsync subversion \
+          swig time xsltproc zlib1g-dev make
+        
+    - name: Download OpenWrt SDK
+      run: |
+        # 使用最新的稳定版 SDK
+        wget -q https://downloads.openwrt.org/releases/23.05.5/targets/x86/64/openwrt-sdk-23.05.5-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz -O sdk.tar.xz || \
+        wget -q https://downloads.openwrt.org/releases/23.05.4/targets/x86/64/openwrt-sdk-23.05.4-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz -O sdk.tar.xz || \
+        wget -q https://downloads.openwrt.org/releases/23.05.3/targets/x86/64/openwrt-sdk-23.05.3-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz -O sdk.tar.xz
+        
+    - name: Extract SDK
+      run: |
+        tar -xf sdk.tar.xz
+        ls -la
+        # 找到解压的目录
+        SDK_DIR=$(find . -maxdepth 1 -type d -name "openwrt-sdk-*" | head -1)
+        echo "SDK_DIR=$SDK_DIR" >> $GITHUB_ENV
+        echo "Found SDK: $SDK_DIR"
+        
+    - name: Setup feeds
+      run: |
+        cd $SDK_DIR
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+        
+    - name: Copy package source
+      run: |
+        mkdir -p $SDK_DIR/feeds/luci/applications/luci-app-advanced-uninstall
+        cp -r src/* $SDK_DIR/feeds/luci/applications/luci-app-advanced-uninstall/
+        cp Makefile $SDK_DIR/feeds/luci/applications/luci-app-advanced-uninstall/
+        
+    - name: Build package
+      run: |
+        cd $SDK_DIR
+        make defconfig
+        make package/luci-app-advanced-uninstall/compile V=s || \
+        make package/luci-app-advanced-uninstall/compile V=99
+        
+    - name: Find and copy IPK
+      id: find_ipk
+      run: |
+        IPK_FILE=$(find $SDK_DIR/bin -name "luci-app-advanced-uninstall*.ipk" 2>/dev/null | head -1)
+        if [ -n "$IPK_FILE" ]; then
+          cp "$IPK_FILE" ./luci-app-advanced-uninstall.ipk
+          echo "ipk_found=true" >> $GITHUB_OUTPUT
+          echo "Found IPK: $IPK_FILE"
+        else
+          echo "ipk_found=false" >> $GITHUB_OUTPUT
+          echo "No IPK found"
+        fi
+        
+    - name: Create Makeself installer
+      if: steps.find_ipk.outputs.ipk_found == 'true'
+      run: |
         sudo apt-get install -y makeself
         
         mkdir -p installer
-        cp artifacts/*.ipk installer/ 2>/dev/null || true
+        cp luci-app-advanced-uninstall.ipk installer/
         
         cat > installer/install.sh << 'SCRIPT'
         #!/usr/bin/env bash
         set -euo pipefail
-        echo "== luci-app-advanced-uninstall installer =="
-        echo "== Compatible with OpenWrt 23.05+ and 25.xx+ =="
+        echo "========================================="
+        echo " LuCI Advanced Uninstall Manager"
+        echo " Installer v2.0.0"
+        echo "========================================="
+        echo ""
         
         # 检测包管理器
         if command -v apk >/dev/null 2>&1; then
           PKG_MGR="apk"
-          PKG_EXT="apk"
-          echo "Detected package manager: apk"
+          echo "Detected package manager: apk (OpenWrt 25.xx+)"
         elif command -v opkg >/dev/null 2>&1; then
           PKG_MGR="opkg"
-          PKG_EXT="ipk"
-          echo "Detected package manager: opkg"
+          echo "Detected package manager: opkg (OpenWrt 23.05/24.10)"
         else
           echo "Error: No supported package manager found (opkg/apk)" >&2
+          echo "Please run on OpenWrt system" >&2
           exit 1
         fi
         
-        echo "Installing packages..."
+        echo ""
+        echo "Installing luci-app-advanced-uninstall..."
         
-        # 查找包文件
-        if [ "$PKG_MGR" = "opkg" ]; then
-          BEST_PKG=$(ls -1t ./luci-app-advanced-uninstall_*.ipk 2>/dev/null | head -n1 || true)
-        else
-          BEST_PKG=$(ls -1t ./luci-app-advanced-uninstall_*.apk 2>/dev/null | head -n1 || true)
-        fi
+        BEST_PKG=$(ls -1t ./luci-app-advanced-uninstall*.ipk 2>/dev/null | head -n1 || true)
         
         if [ -z "$BEST_PKG" ]; then
-          echo "No local luci-app-advanced-uninstall package found" >&2
+          echo "Error: No package file found" >&2
           exit 2
         fi
         
-        echo "Found package: $BEST_PKG"
+        echo "Package: $BEST_PKG"
+        echo ""
         
-        # 安装
         if [ "$PKG_MGR" = "opkg" ]; then
+          echo "Removing old version..."
           opkg remove luci-app-advanced-uninstall >/dev/null 2>&1 || true
+          
+          echo "Updating package list..."
           opkg update >/dev/null 2>&1 || true
-          if ! opkg install --force-reinstall --force-downgrade --force-overwrite "$BEST_PKG"; then
-            echo "Retrying with --force-depends and --force-overwrite"
+          
+          echo "Installing..."
+          if ! opkg install --force-reinstall --force-overwrite "$BEST_PKG"; then
+            echo "Retrying with force options..."
             opkg install --force-reinstall --force-downgrade --force-depends --force-overwrite "$BEST_PKG"
           fi
         else
+          echo "Removing old version..."
           apk del luci-app-advanced-uninstall >/dev/null 2>&1 || true
+          
+          echo "Updating package list..."
           apk update >/dev/null 2>&1 || true
+          
+          echo "Installing..."
           apk add --allow-untrusted "$BEST_PKG"
         fi
         
-        echo "Installation finished."
+        echo ""
+        echo "========================================="
+        echo " Installation completed successfully!"
+        echo "========================================="
+        echo ""
         echo "Access via: LuCI -> System -> 高级卸载"
+        echo ""
         SCRIPT
         chmod +x installer/install.sh
         
-        echo "${GITHUB_REF_NAME:-2.0.0}" > installer/VERSION
+        echo "2.0.0" > installer/VERSION
         
         makeself --xz installer "luci-app-advanced-uninstall.run" \
-          "luci-app-advanced-uninstall Installer (OpenWrt 23.05+/25.xx+)" ./install.sh
+          "LuCI Advanced Uninstall Manager v2.0.0" ./install.sh
           
-    - name: Upload installer
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: installer
-        path: luci-app-advanced-uninstall.run
-
-  release:
-    name: Create Release
-    needs: [build-23-05, build-24-10, create-installer]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    
-    steps:
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      
-    - name: List files
-      run: find . -type f -name "*.ipk" -o -name "*.run" | head -20
-      
+        name: packages
+        path: |
+          luci-app-advanced-uninstall.ipk
+          luci-app-advanced-uninstall.run
+        if-no-files-found: warn
+        
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v2
       with:
         files: |
-          package-23.05-opkg/*.ipk
-          package-24.10/*.ipk
-          installer/*.run
+          luci-app-advanced-uninstall.ipk
+          luci-app-advanced-uninstall.run
         draft: false
         prerelease: false
         generate_release_notes: true
