@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-advanced-uninstall
-PKG_VERSION:=2.0.0
+PKG_VERSION:=2.0.2
 PKG_RELEASE:=1
 
 PKG_MAINTAINER:=Your Name <your-email@example.com>
@@ -15,7 +15,6 @@ define Package/$(PKG_NAME)
   TITLE:=LuCI Advanced Uninstall Manager
   DEPENDS:=+luci-base +rpcd
   PKGARCH:=all
-  EXTRA_DEPENDS:=@(PACKAGE_opkg||PACKAGE_apk)
 endef
 
 define Package/$(PKG_NAME)/description
@@ -27,7 +26,9 @@ endef
 
 define Build/Prepare
 	mkdir -p $(PKG_BUILD_DIR)
-	$(CP) ./src/* $(PKG_BUILD_DIR)/
+	$(CP) ./controller $(PKG_BUILD_DIR)/
+	$(CP) ./view $(PKG_BUILD_DIR)/
+	$(CP) ./acl.d $(PKG_BUILD_DIR)/
 endef
 
 define Build/Compile
@@ -42,10 +43,6 @@ define Package/$(PKG_NAME)/install
 	
 	$(INSTALL_DIR) $(1)/usr/share/rpcd/acl.d
 	$(INSTALL_DATA) $(PKG_BUILD_DIR)/acl.d/luci-app-advanced-uninstall.json $(1)/usr/share/rpcd/acl.d/luci-app-advanced-uninstall.json
-	
-	$(INSTALL_DIR) $(1)/www/luci-static/resources/app-icons
-	$(INSTALL_DATA) $(PKG_BUILD_DIR)/icons/*.png $(1)/www/luci-static/resources/app-icons/ 2>/dev/null || true
-	$(INSTALL_DATA) $(PKG_BUILD_DIR)/icons/*.svg $(1)/www/luci-static/resources/app-icons/ 2>/dev/null || true
 endef
 
 define Package/$(PKG_NAME)/postinst

@@ -27,7 +27,6 @@ jobs:
         
     - name: Download OpenWrt SDK
       run: |
-        # 尝试多个 SDK 版本
         wget -q https://downloads.openwrt.org/releases/23.05.5/targets/x86/64/openwrt-sdk-23.05.5-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz -O sdk.tar.xz || \
         wget -q https://downloads.openwrt.org/releases/23.05.4/targets/x86/64/openwrt-sdk-23.05.4-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz -O sdk.tar.xz || \
         wget -q https://downloads.openwrt.org/releases/23.05.3/targets/x86/64/openwrt-sdk-23.05.3-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz -O sdk.tar.xz
@@ -47,10 +46,17 @@ jobs:
         
     - name: Copy package to correct location
       run: |
-        # 复制到 package 目录而不是 feeds
+        # 创建包目录
         mkdir -p $SDK_DIR/package/luci-app-advanced-uninstall
-        cp -r src/* $SDK_DIR/package/luci-app-advanced-uninstall/
+        
+        # 复制 Makefile
         cp Makefile $SDK_DIR/package/luci-app-advanced-uninstall/
+        
+        # 复制源代码目录
+        cp -r src/controller $SDK_DIR/package/luci-app-advanced-uninstall/
+        cp -r src/view $SDK_DIR/package/luci-app-advanced-uninstall/
+        cp -r src/acl.d $SDK_DIR/package/luci-app-advanced-uninstall/
+        
         echo "Package files:"
         ls -la $SDK_DIR/package/luci-app-advanced-uninstall/
         
@@ -71,8 +77,8 @@ jobs:
         else
           echo "ipk_found=false" >> $GITHUB_OUTPUT
           echo "No IPK found"
-          # Debug: list what's in bin
-          find $SDK_DIR/bin -name "*.ipk" | head -20
+          echo "Searching for IPK files:"
+          find $SDK_DIR/bin -name "*.ipk" 2>/dev/null | head -20
         fi
         
     - name: Create Makeself installer
@@ -88,11 +94,10 @@ jobs:
         set -euo pipefail
         echo "========================================="
         echo " LuCI Advanced Uninstall Manager"
-        echo " Installer v2.0.1"
+        echo " Installer v2.0.2"
         echo "========================================="
         echo ""
         
-        # 检测包管理器
         if command -v apk >/dev/null 2>&1; then
           PKG_MGR="apk"
           echo "Detected: apk (OpenWrt 25.xx+)"
@@ -132,10 +137,10 @@ jobs:
         echo "========================================="
         SCRIPT
         chmod +x installer/install.sh
-        echo "2.0.1" > installer/VERSION
+        echo "2.0.2" > installer/VERSION
         
         makeself --xz installer "luci-app-advanced-uninstall.run" \
-          "LuCI Advanced Uninstall Manager v2.0.1" ./install.sh
+          "LuCI Advanced Uninstall Manager v2.0.2" ./install.sh
           
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
