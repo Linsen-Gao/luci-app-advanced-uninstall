@@ -1,0 +1,21 @@
+{
+	"luci-app-advanced-uninstall": {
+		"description": "Grant access to Advanced Uninstall Manager",
+		"read": {
+			"ubus": {
+				"luci": ["getInitList"]
+			},
+			"uci": ["luci-app-advanced-uninstall"]
+		},
+		"write": {
+			"ubus": {
+				"luci": ["setInitAction"]
+			},
+			"uci": ["luci-app-advanced-uninstall"],
+			"file": {
+				"/etc/luci-app-advanced-uninstall/*": ["list", "read", "write"],
+				"/tmp/luci-*": ["list", "read", "write"]
+			}
+		}
+	}
+}

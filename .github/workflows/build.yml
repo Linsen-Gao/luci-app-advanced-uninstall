@@ -1,0 +1,147 @@
+name: Build IPK Package
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup OpenWrt SDK
+      run: |
+        # 下载 OpenWrt SDK (x86_64 示例，可根据需要修改)
+        wget -q https://downloads.openwrt.org/releases/23.05.3/targets/x86/64/openwrt-sdk-23.05.3-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
+        tar -xf openwrt-sdk-*.tar.xz
+        mv openwrt-sdk-* openwrt-sdk
+        cd openwrt-sdk
+        
+        # 更新 feeds
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+        
+    - name: Copy package to SDK
+      run: |
+        mkdir -p openwrt-sdk/feeds/luci/applications/luci-app-advanced-uninstall
+        cp -r src/* openwrt-sdk/feeds/luci/applications/luci-app-advanced-uninstall/
+        cp Makefile openwrt-sdk/feeds/luci/applications/luci-app-advanced-uninstall/
+        
+    - name: Build package
+      run: |
+        cd openwrt-sdk
+        make defconfig
+        make package/luci-app-advanced-uninstall/compile V=s
+        
+    - name: Find IPK file
+      id: find_ipk
+      run: |
+        IPK_FILE=$(find openwrt-sdk/bin -name "luci-app-advanced-uninstall*.ipk" | head -1)
+        echo "ipk_file=$IPK_FILE" >> $GITHUB_OUTPUT
+        echo "Found IPK: $IPK_FILE"
+        
+    - name: Create Makeself installer
+      run: |
+        # 安装 makeself
+        sudo apt-get update
+        sudo apt-get install -y makeself
+        
+        # 创建安装目录
+        mkdir -p installer
+        cp "${{ steps.find_ipk.outputs.ipk_file }}" installer/
+        
+        # 创建安装脚本
+        cat > installer/install.sh << 'EOF'
+        #!/usr/bin/env bash
+        set -euo pipefail
+        echo "== luci-app-advanced-uninstall installer =="
+        
+        if ! command -v opkg >/dev/null 2>&1; then
+          echo "Error: opkg not found. Please run on OpenWrt." >&2
+          exit 1
+        fi
+        
+        echo "Installing packages..."
+        BEST_IPK=$(ls -1t ./luci-app-advanced-uninstall_*.ipk 2>/dev/null | head -n1 || true)
+        
+        if [ -z "$BEST_IPK" ]; then
+          echo "No local luci-app-advanced-uninstall_*.ipk found" >&2
+          exit 2
+        fi
+        
+        opkg remove luci-app-advanced-uninstall >/dev/null 2>&1 || true
+        opkg update >/dev/null 2>&1 || true
+        
+        if ! opkg install --force-reinstall --force-downgrade --force-overwrite "$BEST_IPK"; then
+          echo "Retrying with --force-depends and --force-overwrite"
+          opkg install --force-reinstall --force-downgrade --force-depends --force-overwrite "$BEST_IPK"
+        fi
+        
+        echo "Installation finished."
+        EOF
+        chmod +x installer/install.sh
+        
+        # 创建版本文件
+        echo "${GITHUB_REF_NAME:-1.0.0}" > installer/VERSION
+        
+        # 打包为 makeself
+        makeself --xz installer "luci-app-advanced-uninstall.run" \
+          "luci-app-advanced-uninstall Installer (23.05.3/x86_64)" ./install.sh
+          
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: packages
+        path: |
+          ${{ steps.find_ipk.outputs.ipk_file }}
+          luci-app-advanced-uninstall.run
+          
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ${{ steps.find_ipk.outputs.ipk_file }}
+          luci-app-advanced-uninstall.run
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-all-arch:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      matrix:
+        arch:
+          - target: x86/64
+            sdk: openwrt-sdk-23.05.3-x86-64_gcc-12.3.0_musl.Linux-x86_64
+          - target: arms/armvirt/64
+            sdk: openwrt-sdk-23.05.3-arms-armvirt-64_gcc-12.3.0_musl.Linux-x86_64
+          - target: ramips/mt7621
+            sdk: openwrt-sdk-23.05.3-ramips-mt7621_gcc-12.3.0_musl.Linux-x86_64
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Build for ${{ matrix.arch.target }}
+      run: |
+        echo "Building for ${{ matrix.arch.target }}"
+        # 这里可以添加针对不同架构的构建逻辑
+        # 由于 SDK 较大，实际使用时可以只构建主要架构
+        
+    - name: Upload architecture artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: packages-${{ matrix.arch.target }}
+        path: "*.ipk"
+        if-no-files-found: ignore

@@ -1,0 +1,887 @@
+<%# SPDX-License-Identifier: Apache-2.0 %>
+<%+header%>
+
+<style>
+.uninstall-container {
+	padding: 20px;
+}
+
+.uninstall-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 20px;
+}
+
+.uninstall-title {
+	font-size: 24px;
+	font-weight: bold;
+}
+
+.uninstall-actions {
+	display: flex;
+	gap: 10px;
+}
+
+.package-table {
+	width: 100%;
+	border-collapse: collapse;
+	margin-top: 10px;
+}
+
+.package-table th,
+.package-table td {
+	padding: 12px;
+	text-align: left;
+	border-bottom: 1px solid #ddd;
+}
+
+.package-table th {
+	background-color: #f5f5f5;
+	font-weight: bold;
+}
+
+.package-table tr:hover {
+	background-color: #f9f9f9;
+}
+
+.package-name {
+	font-weight: 500;
+	color: #333;
+}
+
+.package-version {
+	color: #666;
+	font-size: 0.9em;
+}
+
+.package-size {
+	color: #888;
+}
+
+.docker-badge {
+	display: inline-block;
+	background-color: #2496ed;
+	color: white;
+	padding: 2px 8px;
+	border-radius: 12px;
+	font-size: 0.75em;
+	margin-left: 8px;
+}
+
+.btn {
+	padding: 8px 16px;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 14px;
+	transition: background-color 0.2s;
+}
+
+.btn-primary {
+	background-color: #007bff;
+	color: white;
+}
+
+.btn-primary:hover {
+	background-color: #0056b3;
+}
+
+.btn-danger {
+	background-color: #dc3545;
+	color: white;
+}
+
+.btn-danger:hover {
+	background-color: #c82333;
+}
+
+.btn-secondary {
+	background-color: #6c757d;
+	color: white;
+}
+
+.btn-secondary:hover {
+	background-color: #545b62;
+}
+
+.btn-sm {
+	padding: 4px 8px;
+	font-size: 12px;
+}
+
+.search-box {
+	display: flex;
+	gap: 10px;
+	margin-bottom: 20px;
+}
+
+.search-input {
+	flex: 1;
+	padding: 10px;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	font-size: 14px;
+}
+
+.filter-group {
+	display: flex;
+	gap: 15px;
+	align-items: center;
+}
+
+.checkbox-label {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	cursor: pointer;
+}
+
+.modal-overlay {
+	display: none;
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: rgba(0,0,0,0.5);
+	z-index: 1000;
+}
+
+.modal-content {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	background-color: white;
+	padding: 30px;
+	border-radius: 8px;
+	min-width: 400px;
+	max-width: 600px;
+	max-height: 80vh;
+	overflow-y: auto;
+}
+
+.modal-header {
+	font-size: 18px;
+	font-weight: bold;
+	margin-bottom: 20px;
+}
+
+.modal-body {
+	margin-bottom: 20px;
+}
+
+.modal-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 10px;
+}
+
+.stat-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 15px;
+	margin-bottom: 20px;
+}
+
+.stat-card {
+	background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+	color: white;
+	padding: 20px;
+	border-radius: 8px;
+	text-align: center;
+}
+
+.stat-card.green {
+	background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+}
+
+.stat-card.orange {
+	background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.stat-card.blue {
+	background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.stat-value {
+	font-size: 32px;
+	font-weight: bold;
+}
+
+.stat-label {
+	font-size: 14px;
+	opacity: 0.9;
+}
+
+.loading {
+	text-align: center;
+	padding: 40px;
+	color: #666;
+}
+
+.empty-state {
+	text-align: center;
+	padding: 60px 20px;
+	color: #888;
+}
+
+.tabs {
+	display: flex;
+	border-bottom: 2px solid #ddd;
+	margin-bottom: 20px;
+}
+
+.tab {
+	padding: 12px 24px;
+	cursor: pointer;
+	border-bottom: 2px solid transparent;
+	margin-bottom: -2px;
+	transition: all 0.2s;
+}
+
+.tab:hover {
+	background-color: #f5f5f5;
+}
+
+.tab.active {
+	border-bottom-color: #007bff;
+	color: #007bff;
+	font-weight: 500;
+}
+
+.batch-actions {
+	display: none;
+	background-color: #e3f2fd;
+	padding: 15px;
+	border-radius: 8px;
+	margin-bottom: 20px;
+}
+
+.batch-actions.visible {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.toast {
+	position: fixed;
+	bottom: 20px;
+	right: 20px;
+	background-color: #333;
+	color: white;
+	padding: 15px 25px;
+	border-radius: 8px;
+	z-index: 2000;
+	animation: slideIn 0.3s ease;
+}
+
+.toast.success {
+	background-color: #28a745;
+}
+
+.toast.error {
+	background-color: #dc3545;
+}
+
+@keyframes slideIn {
+	from {
+		transform: translateX(100%);
+		opacity: 0;
+	}
+	to {
+		transform: translateX(0);
+		opacity: 1;
+	}
+}
+
+.progress-bar {
+	width: 100%;
+	height: 4px;
+	background-color: #f0f0f0;
+	border-radius: 2px;
+	overflow: hidden;
+}
+
+.progress-fill {
+	height: 100%;
+	background-color: #007bff;
+	transition: width 0.3s;
+}
+</style>
+
+<div class="uninstall-container">
+	<div class="uninstall-header">
+		<h1 class="uninstall-title"><%:高级卸载管理%></h1>
+		<div class="uninstall-actions">
+			<button class="btn btn-secondary" onclick="refreshList()">
+				<i class="icon-refresh"></i> <%:刷新%>
+			</button>
+			<button class="btn btn-primary" onclick="showInstallModal()">
+				<i class="icon-plus"></i> <%:安装包%>
+			</button>
+		</div>
+	</div>
+
+	<div class="stat-cards">
+		<div class="stat-card">
+			<div class="stat-value" id="total-packages">-</div>
+			<div class="stat-label"><%:已安装软件包%></div>
+		</div>
+		<div class="stat-card green">
+			<div class="stat-value" id="docker-packages">-</div>
+			<div class="stat-label"><%:Docker 关联%></div>
+		</div>
+		<div class="stat-card orange">
+			<div class="stat-value" id="selected-count">0</div>
+			<div class="stat-label"><%:已选择%></div>
+		</div>
+		<div class="stat-card blue">
+			<div class="stat-value" id="disk-usage">-</div>
+			<div class="stat-label"><%:磁盘占用%></div>
+		</div>
+	</div>
+
+	<div class="search-box">
+		<input type="text" class="search-input" id="search-input" placeholder="<%:搜索软件包名称...%>" oninput="filterPackages()">
+		<div class="filter-group">
+			<label class="checkbox-label">
+				<input type="checkbox" id="filter-docker" onchange="filterPackages()">
+				<%:仅显示 Docker 关联%>
+			</label>
+			<label class="checkbox-label">
+				<input type="checkbox" id="filter-selected" onchange="filterPackages()">
+				<%:仅显示已选择%>
+			</label>
+		</div>
+	</div>
+
+	<div class="batch-actions" id="batch-actions">
+		<span><%:已选择%> <strong id="batch-count">0</strong> <%:个软件包%></span>
+		<div>
+			<button class="btn btn-secondary btn-sm" onclick="clearSelection()"><%:取消选择%></button>
+			<button class="btn btn-danger btn-sm" onclick="batchRemove()"><%:批量卸载%></button>
+		</div>
+	</div>
+
+	<div id="loading" class="loading">
+		<i class="icon-spin icon-spinner"></i> <%:加载中...%>
+	</div>
+
+	<div id="package-list" style="display:none;">
+		<table class="package-table">
+			<thead>
+				<tr>
+					<th width="30"><input type="checkbox" id="select-all" onchange="toggleSelectAll()"></th>
+					<th><%:软件包名称%></th>
+					<th><%:版本%></th>
+					<th><%:大小%></th>
+					<th><%:操作%></th>
+				</tr>
+			</thead>
+			<tbody id="package-tbody">
+			</tbody>
+		</table>
+	</div>
+
+	<div id="empty-state" class="empty-state" style="display:none;">
+		<p><%:没有找到匹配的软件包%></p>
+	</div>
+</div>
+
+<!-- 卸载确认对话框 -->
+<div class="modal-overlay" id="remove-modal">
+	<div class="modal-content">
+		<div class="modal-header"><%:确认卸载%></div>
+		<div class="modal-body">
+			<p><%:确定要卸载以下软件包吗？%></p>
+			<p><strong id="remove-package-name"></strong></p>
+			<div id="remove-options">
+				<label class="checkbox-label" style="margin-top: 10px;">
+					<input type="checkbox" id="remove-docker" checked>
+					<%:同时清理关联的 Docker 容器%>
+				</label>
+				<label class="checkbox-label" style="margin-top: 10px;">
+					<input type="checkbox" id="remove-deps">
+					<%:同时移除不再使用的依赖%>
+				</label>
+				<label class="checkbox-label" style="margin-top: 10px;">
+					<input type="checkbox" id="force-remove">
+					<%:强制卸载（忽略依赖检查）%>
+				</label>
+			</div>
+		</div>
+		<div class="modal-footer">
+			<button class="btn btn-secondary" onclick="closeRemoveModal()"><%:取消%></button>
+			<button class="btn btn-danger" onclick="confirmRemove()"><%:确认卸载%></button>
+		</div>
+	</div>
+</div>
+
+<!-- 批量卸载确认对话框 -->
+<div class="modal-overlay" id="batch-remove-modal">
+	<div class="modal-content">
+		<div class="modal-header"><%:确认批量卸载%></div>
+		<div class="modal-body">
+			<p><%:确定要卸载选中的软件包吗？%></p>
+			<div id="batch-remove-list" style="max-height: 200px; overflow-y: auto; margin: 10px 0;"></div>
+			<label class="checkbox-label" style="margin-top: 10px;">
+				<input type="checkbox" id="batch-remove-docker" checked>
+				<%:同时清理关联的 Docker 容器%>
+			</label>
+			<label class="checkbox-label" style="margin-top: 10px;">
+				<input type="checkbox" id="batch-force-remove">
+				<%:强制卸载%>
+			</label>
+		</div>
+		<div class="modal-footer">
+			<button class="btn btn-secondary" onclick="closeBatchRemoveModal()"><%:取消%></button>
+			<button class="btn btn-danger" onclick="confirmBatchRemove()"><%:确认卸载%></button>
+		</div>
+	</div>
+</div>
+
+<!-- 安装对话框 -->
+<div class="modal-overlay" id="install-modal">
+	<div class="modal-content">
+		<div class="modal-header"><%:安装软件包%></div>
+		<div class="modal-body">
+			<div class="tabs">
+				<div class="tab active" onclick="switchInstallTab('url')"><%:从 URL 安装%></div>
+				<div class="tab" onclick="switchInstallTab('upload')"><%:上传安装%></div>
+			</div>
+			<div id="install-url-tab">
+				<label><%:输入 IPK 包下载地址：%></label>
+				<input type="text" class="search-input" id="install-url" placeholder="https://example.com/package.ipk" style="margin-top: 10px;">
+			</div>
+			<div id="install-upload-tab" style="display:none;">
+				<label><%:选择本地 IPK 文件：%></label>
+				<input type="file" id="install-file" accept=".ipk" style="margin-top: 10px;">
+			</div>
+			<div id="install-progress" style="display:none; margin-top: 20px;">
+				<div class="progress-bar">
+					<div class="progress-fill" id="install-progress-fill" style="width: 0%;"></div>
+				</div>
+				<p id="install-status" style="margin-top: 10px; text-align: center;"></p>
+			</div>
+		</div>
+		<div class="modal-footer">
+			<button class="btn btn-secondary" onclick="closeInstallModal()"><%:取消%></button>
+			<button class="btn btn-primary" onclick="startInstall()" id="install-btn"><%:开始安装%></button>
+		</div>
+	</div>
+</div>
+
+<!-- 详情对话框 -->
+<div class="modal-overlay" id="detail-modal">
+	<div class="modal-content" style="min-width: 600px;">
+		<div class="modal-header"><%:软件包详情%></div>
+		<div class="modal-body" id="detail-content">
+		</div>
+		<div class="modal-footer">
+			<button class="btn btn-secondary" onclick="closeDetailModal()"><%:关闭%></button>
+		</div>
+	</div>
+</div>
+
+<script>
+var packages = [];
+var selectedPackages = {};
+var currentRemovePackage = null;
+
+// 页面加载时获取列表
+document.addEventListener('DOMContentLoaded', function() {
+	refreshList();
+});
+
+// 刷新列表
+function refreshList() {
+	showLoading(true);
+	fetch('<%=luci.dispatcher.build_url("admin", "system", "uninstall", "list")%>')
+		.then(response => response.json())
+		.then(data => {
+			packages = data.packages || [];
+			updateStats();
+			renderPackages();
+			showLoading(false);
+		})
+		.catch(error => {
+			console.error('Error:', error);
+			showToast('<%:获取列表失败%>', 'error');
+			showLoading(false);
+		});
+}
+
+// 更新统计信息
+function updateStats() {
+	document.getElementById('total-packages').textContent = packages.length;
+	
+	var dockerCount = packages.filter(p => p.has_docker).length;
+	document.getElementById('docker-packages').textContent = dockerCount;
+	
+	var totalSize = packages.reduce((sum, p) => sum + (p.size || 0), 0);
+	document.getElementById('disk-usage').textContent = formatSize(totalSize * 1024);
+}
+
+// 渲染软件包列表
+function renderPackages() {
+	var tbody = document.getElementById('package-tbody');
+	var keyword = document.getElementById('search-input').value.toLowerCase();
+	var showDocker = document.getElementById('filter-docker').checked;
+	var showSelected = document.getElementById('filter-selected').checked;
+	
+	var filtered = packages.filter(function(pkg) {
+		if (keyword && !pkg.name.toLowerCase().includes(keyword)) {
+			return false;
+		}
+		if (showDocker && !pkg.has_docker) {
+			return false;
+		}
+		if (showSelected && !selectedPackages[pkg.name]) {
+			return false;
+		}
+		return true;
+	});
+	
+	if (filtered.length === 0) {
+		document.getElementById('package-list').style.display = 'none';
+		document.getElementById('empty-state').style.display = 'block';
+		return;
+	}
+	
+	document.getElementById('package-list').style.display = 'block';
+	document.getElementById('empty-state').style.display = 'none';
+	
+	tbody.innerHTML = filtered.map(function(pkg) {
+		var isSelected = selectedPackages[pkg.name];
+		return '<tr>' +
+			'<td><input type="checkbox" ' + (isSelected ? 'checked' : '') + ' onchange="toggleSelect(\'' + pkg.name + '\')"></td>' +
+			'<td class="package-name">' + escapeHtml(pkg.name) + 
+			(pkg.has_docker ? '<span class="docker-badge">Docker</span>' : '') +
+			'</td>' +
+			'<td class="package-version">' + escapeHtml(pkg.version) + '</td>' +
+			'<td class="package-size">' + formatSize(pkg.size * 1024) + '</td>' +
+			'<td>' +
+				'<button class="btn btn-secondary btn-sm" onclick="showDetail(\'' + pkg.name + '\')"><%:详情%></button> ' +
+				'<button class="btn btn-danger btn-sm" onclick="showRemoveModal(\'' + pkg.name + '\')"><%:卸载%></button>' +
+			'</td>' +
+			'</tr>';
+	}).join('');
+}
+
+// 过滤软件包
+function filterPackages() {
+	renderPackages();
+}
+
+// 切换选择
+function toggleSelect(name) {
+	if (selectedPackages[name]) {
+		delete selectedPackages[name];
+	} else {
+		selectedPackages[name] = true;
+	}
+	updateSelection();
+}
+
+// 全选/取消全选
+function toggleSelectAll() {
+	var checked = document.getElementById('select-all').checked;
+	var keyword = document.getElementById('search-input').value.toLowerCase();
+	
+	packages.forEach(function(pkg) {
+		if (!keyword || pkg.name.toLowerCase().includes(keyword)) {
+			if (checked) {
+				selectedPackages[pkg.name] = true;
+			} else {
+				delete selectedPackages[pkg.name];
+			}
+		}
+	});
+	
+	renderPackages();
+	updateSelection();
+}
+
+// 更新选择状态
+function updateSelection() {
+	var count = Object.keys(selectedPackages).length;
+	document.getElementById('selected-count').textContent = count;
+	document.getElementById('batch-count').textContent = count;
+	
+	var batchActions = document.getElementById('batch-actions');
+	if (count > 0) {
+		batchActions.classList.add('visible');
+	} else {
+		batchActions.classList.remove('visible');
+	}
+}
+
+// 清除选择
+function clearSelection() {
+	selectedPackages = {};
+	document.getElementById('select-all').checked = false;
+	renderPackages();
+	updateSelection();
+}
+
+// 显示卸载对话框
+function showRemoveModal(name) {
+	currentRemovePackage = name;
+	document.getElementById('remove-package-name').textContent = name;
+	
+	var pkg = packages.find(p => p.name === name);
+	var dockerOption = document.getElementById('remove-options');
+	if (pkg && pkg.has_docker) {
+		document.getElementById('remove-docker').parentElement.style.display = 'flex';
+		document.getElementById('remove-docker').checked = true;
+	} else {
+		document.getElementById('remove-docker').parentElement.style.display = 'none';
+	}
+	
+	document.getElementById('remove-modal').style.display = 'block';
+}
+
+// 关闭卸载对话框
+function closeRemoveModal() {
+	document.getElementById('remove-modal').style.display = 'none';
+	currentRemovePackage = null;
+}
+
+// 确认卸载
+function confirmRemove() {
+	if (!currentRemovePackage) return;
+	
+	var removeDocker = document.getElementById('remove-docker').checked;
+	var removeDeps = document.getElementById('remove-deps').checked;
+	var force = document.getElementById('force-remove').checked;
+	
+	closeRemoveModal();
+	showToast('<%:正在卸载...%>');
+	
+	var url = '<%=luci.dispatcher.build_url("admin", "system", "uninstall", "remove")%>' +
+		'?package=' + encodeURIComponent(currentRemovePackage) +
+		'&remove_docker=' + (removeDocker ? '1' : '0') +
+		'&remove_deps=' + (removeDeps ? '1' : '0') +
+		'&force=' + (force ? '1' : '0');
+	
+	fetch(url)
+		.then(response => response.json())
+		.then(data => {
+			if (data.ok) {
+				showToast('<%:卸载成功%>', 'success');
+				refreshList();
+			} else {
+				showToast(data.error || '<%:卸载失败%>', 'error');
+			}
+		})
+		.catch(error => {
+			showToast('<%:操作失败%>', 'error');
+		});
+}
+
+// 批量卸载
+function batchRemove() {
+	var list = Object.keys(selectedPackages);
+	if (list.length === 0) return;
+	
+	var listHtml = list.map(function(name) {
+		return '<div>- ' + escapeHtml(name) + '</div>';
+	}).join('');
+	document.getElementById('batch-remove-list').innerHTML = listHtml;
+	
+	document.getElementById('batch-remove-modal').style.display = 'block';
+}
+
+// 关闭批量卸载对话框
+function closeBatchRemoveModal() {
+	document.getElementById('batch-remove-modal').style.display = 'none';
+}
+
+// 确认批量卸载
+function confirmBatchRemove() {
+	var list = Object.keys(selectedPackages);
+	var removeDocker = document.getElementById('batch-remove-docker').checked;
+	var force = document.getElementById('batch-force-remove').checked;
+	
+	closeBatchRemoveModal();
+	showToast('<%:正在批量卸载...%>');
+	
+	fetch('<%=luci.dispatcher.build_url("admin", "system", "uninstall", "batch_remove")%>', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({
+			packages: list,
+			remove_docker: removeDocker,
+			force: force
+		})
+	})
+	.then(response => response.json())
+	.then(data => {
+		if (data.ok) {
+			showToast(data.message, 'success');
+			clearSelection();
+			refreshList();
+		} else {
+			showToast(data.error || '<%:批量卸载失败%>', 'error');
+		}
+	})
+	.catch(error => {
+		showToast('<%:操作失败%>', 'error');
+	});
+}
+
+// 显示详情
+function showDetail(name) {
+	fetch('<%=luci.dispatcher.build_url("admin", "system", "uninstall", "info")%>?package=' + encodeURIComponent(name))
+		.then(response => response.json())
+		.then(data => {
+			var html = '<table style="width:100%;">';
+			if (data.info) {
+				for (var key in data.info) {
+					html += '<tr><td style="font-weight:bold;padding:8px 0;">' + escapeHtml(key) + ':</td>';
+					html += '<td style="padding:8px 0;">' + escapeHtml(data.info[key]) + '</td></tr>';
+				}
+			}
+			html += '</table>';
+			
+			if (data.docker_containers && data.docker_containers.length > 0) {
+				html += '<h4 style="margin-top:20px;"><%:关联的 Docker 容器%></h4>';
+				html += '<ul>';
+				data.docker_containers.forEach(function(c) {
+					html += '<li>' + escapeHtml(c) + '</li>';
+				});
+				html += '</ul>';
+			}
+			
+			document.getElementById('detail-content').innerHTML = html;
+			document.getElementById('detail-modal').style.display = 'block';
+		});
+}
+
+// 关闭详情对话框
+function closeDetailModal() {
+	document.getElementById('detail-modal').style.display = 'none';
+}
+
+// 显示安装对话框
+function showInstallModal() {
+	document.getElementById('install-modal').style.display = 'block';
+	document.getElementById('install-progress').style.display = 'none';
+}
+
+// 关闭安装对话框
+function closeInstallModal() {
+	document.getElementById('install-modal').style.display = 'none';
+}
+
+// 切换安装标签
+function switchInstallTab(tab) {
+	document.querySelectorAll('.tab').forEach(function(t) {
+		t.classList.remove('active');
+	});
+	event.target.classList.add('active');
+	
+	if (tab === 'url') {
+		document.getElementById('install-url-tab').style.display = 'block';
+		document.getElementById('install-upload-tab').style.display = 'none';
+	} else {
+		document.getElementById('install-url-tab').style.display = 'none';
+		document.getElementById('install-upload-tab').style.display = 'block';
+	}
+}
+
+// 开始安装
+function startInstall() {
+	var url = document.getElementById('install-url').value;
+	var fileInput = document.getElementById('install-file');
+	
+	if (url) {
+		// URL 安装
+		document.getElementById('install-progress').style.display = 'block';
+		document.getElementById('install-status').textContent = '<%:正在下载并安装...%>';
+		document.getElementById('install-progress-fill').style.width = '50%';
+		
+		fetch('<%=luci.dispatcher.build_url("admin", "system", "uninstall", "install_from_url")%>', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+			body: 'url=' + encodeURIComponent(url)
+		})
+		.then(response => response.json())
+		.then(data => {
+			document.getElementById('install-progress-fill').style.width = '100%';
+			if (data.ok) {
+				document.getElementById('install-status').textContent = '<%:安装成功%>';
+				setTimeout(function() {
+					closeInstallModal();
+					refreshList();
+				}, 1000);
+			} else {
+				document.getElementById('install-status').textContent = data.error || '<%:安装失败%>';
+			}
+		});
+	} else if (fileInput.files.length > 0) {
+		// 上传安装
+		var formData = new FormData();
+		formData.append('file', fileInput.files[0]);
+		
+		document.getElementById('install-progress').style.display = 'block';
+		document.getElementById('install-status').textContent = '<%:正在上传并安装...%>';
+		document.getElementById('install-progress-fill').style.width = '30%';
+		
+		fetch('<%=luci.dispatcher.build_url("admin", "system", "uninstall", "install_upload")%>', {
+			method: 'POST',
+			body: formData
+		})
+		.then(response => response.json())
+		.then(data => {
+			document.getElementById('install-progress-fill').style.width = '100%';
+			if (data.ok) {
+				document.getElementById('install-status').textContent = '<%:安装成功%>';
+				setTimeout(function() {
+					closeInstallModal();
+					refreshList();
+				}, 1000);
+			} else {
+				document.getElementById('install-status').textContent = data.error || '<%:安装失败%>';
+			}
+		});
+	} else {
+		showToast('<%:请提供 URL 或选择文件%>', 'error');
+	}
+}
+
+// 工具函数
+function showLoading(show) {
+	document.getElementById('loading').style.display = show ? 'block' : 'none';
+	document.getElementById('package-list').style.display = show ? 'none' : 'block';
+}
+
+function showToast(message, type) {
+	var toast = document.createElement('div');
+	toast.className = 'toast ' + (type || '');
+	toast.textContent = message;
+	document.body.appendChild(toast);
+	
+	setTimeout(function() {
+		toast.remove();
+	}, 3000);
+}
+
+function formatSize(bytes) {
+	if (bytes === 0) return '0 B';
+	var k = 1024;
+	var sizes = ['B', 'KB', 'MB', 'GB'];
+	var i = Math.floor(Math.log(bytes) / Math.log(k));
+	return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function escapeHtml(text) {
+	var div = document.createElement('div');
+	div.textContent = text;
+	return div.innerHTML;
+}
+</script>
+
+<%+footer%>
