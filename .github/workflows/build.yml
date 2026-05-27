@@ -27,7 +27,7 @@ jobs:
         
     - name: Download OpenWrt SDK
       run: |
-        # 使用最新的稳定版 SDK
+        # 尝试多个 SDK 版本
         wget -q https://downloads.openwrt.org/releases/23.05.5/targets/x86/64/openwrt-sdk-23.05.5-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz -O sdk.tar.xz || \
         wget -q https://downloads.openwrt.org/releases/23.05.4/targets/x86/64/openwrt-sdk-23.05.4-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz -O sdk.tar.xz || \
         wget -q https://downloads.openwrt.org/releases/23.05.3/targets/x86/64/openwrt-sdk-23.05.3-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz -O sdk.tar.xz
@@ -35,8 +35,6 @@ jobs:
     - name: Extract SDK
       run: |
         tar -xf sdk.tar.xz
-        ls -la
-        # 找到解压的目录
         SDK_DIR=$(find . -maxdepth 1 -type d -name "openwrt-sdk-*" | head -1)
         echo "SDK_DIR=$SDK_DIR" >> $GITHUB_ENV
         echo "Found SDK: $SDK_DIR"
@@ -47,18 +45,20 @@ jobs:
         ./scripts/feeds update -a
         ./scripts/feeds install -a
         
-    - name: Copy package source
+    - name: Copy package to correct location
       run: |
-        mkdir -p $SDK_DIR/feeds/luci/applications/luci-app-advanced-uninstall
-        cp -r src/* $SDK_DIR/feeds/luci/applications/luci-app-advanced-uninstall/
-        cp Makefile $SDK_DIR/feeds/luci/applications/luci-app-advanced-uninstall/
+        # 复制到 package 目录而不是 feeds
+        mkdir -p $SDK_DIR/package/luci-app-advanced-uninstall
+        cp -r src/* $SDK_DIR/package/luci-app-advanced-uninstall/
+        cp Makefile $SDK_DIR/package/luci-app-advanced-uninstall/
+        echo "Package files:"
+        ls -la $SDK_DIR/package/luci-app-advanced-uninstall/
         
     - name: Build package
       run: |
         cd $SDK_DIR
         make defconfig
-        make package/luci-app-advanced-uninstall/compile V=s || \
-        make package/luci-app-advanced-uninstall/compile V=99
+        make package/luci-app-advanced-uninstall/compile V=s
         
     - name: Find and copy IPK
       id: find_ipk
@@ -71,6 +71,8 @@ jobs:
         else
           echo "ipk_found=false" >> $GITHUB_OUTPUT
           echo "No IPK found"
+          # Debug: list what's in bin
+          find $SDK_DIR/bin -name "*.ipk" | head -20
         fi
         
     - name: Create Makeself installer
@@ -86,26 +88,23 @@ jobs:
         set -euo pipefail
         echo "========================================="
         echo " LuCI Advanced Uninstall Manager"
-        echo " Installer v2.0.0"
+        echo " Installer v2.0.1"
         echo "========================================="
         echo ""
         
         # 检测包管理器
         if command -v apk >/dev/null 2>&1; then
           PKG_MGR="apk"
-          echo "Detected package manager: apk (OpenWrt 25.xx+)"
+          echo "Detected: apk (OpenWrt 25.xx+)"
         elif command -v opkg >/dev/null 2>&1; then
           PKG_MGR="opkg"
-          echo "Detected package manager: opkg (OpenWrt 23.05/24.10)"
+          echo "Detected: opkg (OpenWrt 23.05/24.10)"
         else
-          echo "Error: No supported package manager found (opkg/apk)" >&2
-          echo "Please run on OpenWrt system" >&2
+          echo "Error: No supported package manager found" >&2
           exit 1
         fi
         
         echo ""
-        echo "Installing luci-app-advanced-uninstall..."
-        
         BEST_PKG=$(ls -1t ./luci-app-advanced-uninstall*.ipk 2>/dev/null | head -n1 || true)
         
         if [ -z "$BEST_PKG" ]; then
@@ -113,46 +112,30 @@ jobs:
           exit 2
         fi
         
-        echo "Package: $BEST_PKG"
-        echo ""
+        echo "Installing: $BEST_PKG"
         
         if [ "$PKG_MGR" = "opkg" ]; then
-          echo "Removing old version..."
           opkg remove luci-app-advanced-uninstall >/dev/null 2>&1 || true
-          
-          echo "Updating package list..."
           opkg update >/dev/null 2>&1 || true
-          
-          echo "Installing..."
-          if ! opkg install --force-reinstall --force-overwrite "$BEST_PKG"; then
-            echo "Retrying with force options..."
-            opkg install --force-reinstall --force-downgrade --force-depends --force-overwrite "$BEST_PKG"
-          fi
+          opkg install --force-reinstall --force-overwrite "$BEST_PKG" || \
+          opkg install --force-reinstall --force-downgrade --force-depends --force-overwrite "$BEST_PKG"
         else
-          echo "Removing old version..."
           apk del luci-app-advanced-uninstall >/dev/null 2>&1 || true
-          
-          echo "Updating package list..."
           apk update >/dev/null 2>&1 || true
-          
-          echo "Installing..."
           apk add --allow-untrusted "$BEST_PKG"
         fi
         
         echo ""
         echo "========================================="
-        echo " Installation completed successfully!"
+        echo " Installation completed!"
+        echo " Access: LuCI -> System -> 高级卸载"
         echo "========================================="
-        echo ""
-        echo "Access via: LuCI -> System -> 高级卸载"
-        echo ""
         SCRIPT
         chmod +x installer/install.sh
-        
-        echo "2.0.0" > installer/VERSION
+        echo "2.0.1" > installer/VERSION
         
         makeself --xz installer "luci-app-advanced-uninstall.run" \
-          "LuCI Advanced Uninstall Manager v2.0.0" ./install.sh
+          "LuCI Advanced Uninstall Manager v2.0.1" ./install.sh
           
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
