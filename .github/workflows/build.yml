@@ -7,6 +7,7 @@ on:
       - 'v*'
   pull_request:
     branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build-ipk:
@@ -78,6 +79,7 @@ jobs:
   build-apk:
     name: Build APK (OpenWrt 25.xx+)
     runs-on: ubuntu-latest
+    continue-on-error: true  # 允许失败但不影响整体
     
     steps:
     - name: Checkout code
@@ -89,29 +91,77 @@ jobs:
         sudo apt-get install -y build-essential ccache ecj fastjar file g++ gawk \
           gettext git java-propose-classpath libelf-dev libncurses5-dev \
           libncursesw5-dev libssl-dev python3 unzip wget rsync subversion \
-          swig time xsltproc zlib1g-dev make
+          swig time xsltproc zlib1g-dev make jq
         
-    - name: Download OpenWrt Snapshot SDK
+    - name: Find Snapshot SDK URL
+      id: find_sdk
       run: |
-        # 尝试获取最新的 snapshot SDK
-        wget -q https://downloads.openwrt.org/snapshots/targets/x86/64/openwrt-sdk-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.xz -O sdk.tar.xz || \
-        wget -q https://downloads.openwrt.org/snapshots/targets/x86/64/ -O index.html && \
-        SDK_URL=$(grep -oP 'href="openwrt-sdk-x86-64[^"]*\.tar\.xz"' index.html | head -1 | grep -oP '"[^"]+"' | tr -d '"') && \
-        wget -q "https://downloads.openwrt.org/snapshots/targets/x86/64/$SDK_URL" -O sdk.tar.xz
+        echo "Searching for latest Snapshot SDK..."
+        
+        # 方法1: 使用 API 获取 snapshot 目录列表
+        SDK_URL=$(curl -sL "https://downloads.openwrt.org/snapshots/targets/x86/64/" | \
+          grep -oP 'href="openwrt-sdk-x86-64[^"]*\.tar\.xz"' | \
+          head -1 | \
+          grep -oP '"[^"]+"' | tr -d '"')
+        
+        if [ -n "$SDK_URL" ]; then
+          FULL_URL="https://downloads.openwrt.org/snapshots/targets/x86/64/$SDK_URL"
+          echo "Found SDK: $FULL_URL"
+          echo "sdk_url=$FULL_URL" >> $GITHUB_OUTPUT
+        else
+          # 方法2: 尝试已知的 URL 模式
+          echo "Trying known URL patterns..."
+          
+          # 尝试不同的 gcc 版本
+          for GCC_VER in "14.2.0" "13.3.0" "12.3.0"; do
+            URL="https://downloads.openwrt.org/snapshots/targets/x86/64/openwrt-sdk-x86-64_gcc-${GCC_VER}_musl.Linux-x86_64.tar.xz"
+            if wget --spider -q "$URL" 2>/dev/null; then
+              echo "Found working URL: $URL"
+              echo "sdk_url=$URL" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          done
+          
+          echo "Could not find Snapshot SDK URL"
+          echo "sdk_url=" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Download Snapshot SDK
+      if: steps.find_sdk.outputs.sdk_url != ''
+      run: |
+        echo "Downloading from: ${{ steps.find_sdk.outputs.sdk_url }}"
+        wget -q --timeout=60 "${{ steps.find_sdk.outputs.sdk_url }}" -O sdk.tar.xz || {
+          echo "Download failed, trying with curl..."
+          curl -sL --max-time 120 "${{ steps.find_sdk.outputs.sdk_url }}" -o sdk.tar.xz
+        }
+        
+        # 验证文件
+        file sdk.tar.xz
+        ls -la sdk.tar.xz
         
     - name: Extract SDK
+      if: steps.find_sdk.outputs.sdk_url != ''
       run: |
-        tar -xf sdk.tar.xz
-        SDK_DIR=$(find . -maxdepth 1 -type d -name "openwrt-sdk-*" | head -1)
-        echo "SDK_DIR=$SDK_DIR" >> $GITHUB_ENV
+        # 检查文件是否是有效的 xz 文件
+        if file sdk.tar.xz | grep -q "XZ compressed"; then
+          tar -xf sdk.tar.xz
+          SDK_DIR=$(find . -maxdepth 1 -type d -name "openwrt-sdk-*" | head -1)
+          echo "SDK_DIR=$SDK_DIR" >> $GITHUB_ENV
+          echo "SDK extracted to: $SDK_DIR"
+        else
+          echo "Invalid SDK file, skipping..."
+          exit 1
+        fi
         
     - name: Setup feeds
+      if: env.SDK_DIR != ''
       run: |
         cd $SDK_DIR
         ./scripts/feeds update -a
         ./scripts/feeds install -a
         
     - name: Copy package
+      if: env.SDK_DIR != ''
       run: |
         mkdir -p $SDK_DIR/package/luci-app-advanced-uninstall
         cp Makefile $SDK_DIR/package/luci-app-advanced-uninstall/
@@ -120,15 +170,15 @@ jobs:
         cp -r src/acl.d $SDK_DIR/package/luci-app-advanced-uninstall/
         
     - name: Build APK
+      if: env.SDK_DIR != ''
       run: |
         cd $SDK_DIR
         make defconfig
-        # Snapshot SDK 可能使用 apk
-        make package/luci-app-advanced-uninstall/compile V=s || \
-        echo "Build may have failed, checking for output..."
+        make package/luci-app-advanced-uninstall/compile V=s
         
     - name: Find APK
       id: find_apk
+      if: env.SDK_DIR != ''
       run: |
         # 查找 .apk 文件
         APK_FILE=$(find $SDK_DIR/bin -name "luci-app-advanced-uninstall*.apk" 2>/dev/null | head -1)
@@ -137,7 +187,7 @@ jobs:
           echo "apk_found=true" >> $GITHUB_OUTPUT
           echo "Found APK: $APK_FILE"
         else
-          # 如果没有 .apk，可能是 .ipk (snapshot 也可能用 opkg)
+          # 查找 .ipk 文件 (snapshot 可能仍然用 opkg)
           IPK_FILE=$(find $SDK_DIR/bin -name "luci-app-advanced-uninstall*.ipk" 2>/dev/null | head -1)
           if [ -n "$IPK_FILE" ]; then
             cp "$IPK_FILE" ./luci-app-advanced-uninstall-snapshot.ipk
@@ -147,7 +197,6 @@ jobs:
           else
             echo "apk_found=false" >> $GITHUB_OUTPUT
             echo "snapshot_ipk_found=false" >> $GITHUB_OUTPUT
-            echo "No package found"
           fi
         fi
         
@@ -192,21 +241,20 @@ jobs:
         set -euo pipefail
         echo "========================================="
         echo " LuCI Advanced Uninstall Manager"
-        echo " Installer v2.1.0"
+        echo " Installer v2.2.0"
         echo "========================================="
         echo ""
         
         # 检测包管理器
         if command -v apk >/dev/null 2>&1; then
           PKG_MGR="apk"
-          PKG_EXT="apk"
           echo "Detected: apk (OpenWrt 25.xx+)"
         elif command -v opkg >/dev/null 2>&1; then
           PKG_MGR="opkg"
-          PKG_EXT="ipk"
           echo "Detected: opkg (OpenWrt 23.05/24.10)"
         else
           echo "Error: No supported package manager found" >&2
+          echo "This installer requires OpenWrt with opkg or apk" >&2
           exit 1
         fi
         
@@ -221,29 +269,54 @@ jobs:
         fi
         
         echo "Installing: $BEST_PKG"
+        echo ""
         
         if [ "$PKG_MGR" = "opkg" ]; then
+          echo "Removing old version..."
           opkg remove luci-app-advanced-uninstall >/dev/null 2>&1 || true
+          
+          echo "Updating package list..."
           opkg update >/dev/null 2>&1 || true
-          opkg install --force-reinstall --force-overwrite "$BEST_PKG" || \
-          opkg install --force-reinstall --force-downgrade --force-depends --force-overwrite "$BEST_PKG"
+          
+          echo "Installing package..."
+          if ! opkg install --force-reinstall --force-overwrite "$BEST_PKG"; then
+            echo "Retrying with force options..."
+            opkg install --force-reinstall --force-downgrade --force-depends --force-overwrite "$BEST_PKG"
+          fi
         else
+          echo "Removing old version..."
           apk del luci-app-advanced-uninstall >/dev/null 2>&1 || true
+          
+          echo "Updating package list..."
           apk update >/dev/null 2>&1 || true
-          apk add --allow-untrusted "$BEST_PKG"
+          
+          echo "Installing package..."
+          if [[ "$BEST_PKG" == *.apk ]]; then
+            apk add --allow-untrusted "$BEST_PKG"
+          else
+            # 尝试用 apk 安装 ipk (某些版本支持)
+            echo "Note: Installing .ipk with apk (compatibility mode)"
+            apk add --allow-untrusted "$BEST_PKG" 2>/dev/null || {
+              echo "Warning: Could not install .ipk with apk"
+              echo "Please install manually using: apk add <package.apk>"
+              exit 1
+            }
+          fi
         fi
         
         echo ""
         echo "========================================="
-        echo " Installation completed!"
-        echo " Access: LuCI -> System -> 高级卸载"
+        echo " Installation completed successfully!"
         echo "========================================="
+        echo ""
+        echo "Access via: LuCI -> System -> 高级卸载"
+        echo ""
         SCRIPT
         chmod +x installer/install.sh
-        echo "2.1.0" > installer/VERSION
+        echo "2.2.0" > installer/VERSION
         
         makeself --xz installer "luci-app-advanced-uninstall.run" \
-          "LuCI Advanced Uninstall Manager v2.1.0" ./install.sh
+          "LuCI Advanced Uninstall Manager v2.2.0" ./install.sh
           
     - name: Upload installer
       uses: actions/upload-artifact@v4
@@ -263,25 +336,34 @@ jobs:
       
     - name: List artifacts
       run: |
-        echo "=== IPK Package ==="
-        ls -la ipk-package/ 2>/dev/null || echo "Not found"
-        echo ""
-        echo "=== APK Package ==="
-        ls -la apk-package/ 2>/dev/null || echo "Not found"
-        echo ""
-        echo "=== Snapshot IPK ==="
-        ls -la snapshot-ipk-package/ 2>/dev/null || echo "Not found"
-        echo ""
-        echo "=== Installer ==="
-        ls -la installer/ 2>/dev/null || echo "Not found"
+        echo "=== Available Artifacts ==="
+        ls -la
         
     - name: Prepare release files
       run: |
         mkdir -p release-files
-        cp ipk-package/*.ipk release-files/ 2>/dev/null || true
-        cp apk-package/*.apk release-files/ 2>/dev/null || true
-        cp snapshot-ipk-package/*.ipk release-files/luci-app-advanced-uninstall-snapshot.ipk 2>/dev/null || true
-        cp installer/*.run release-files/ 2>/dev/null || true
+        
+        # IPK
+        if [ -d "ipk-package" ]; then
+          cp ipk-package/*.ipk release-files/ 2>/dev/null || true
+        fi
+        
+        # APK
+        if [ -d "apk-package" ]; then
+          cp apk-package/*.apk release-files/ 2>/dev/null || true
+        fi
+        
+        # Snapshot IPK
+        if [ -d "snapshot-ipk-package" ]; then
+          cp snapshot-ipk-package/*.ipk release-files/luci-app-advanced-uninstall-snapshot.ipk 2>/dev/null || true
+        fi
+        
+        # Installer
+        if [ -d "installer" ]; then
+          cp installer/*.run release-files/ 2>/dev/null || true
+        fi
+        
+        echo "=== Release Files ==="
         ls -la release-files/
         
     - name: Create Release

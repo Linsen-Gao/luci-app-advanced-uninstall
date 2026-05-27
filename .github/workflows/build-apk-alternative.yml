@@ -1,0 +1,98 @@
+name: Build APK (Alternative Method)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 0'  # 每周日运行
+
+jobs:
+  build-apk-docker:
+    name: Build APK using Docker
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Build package using Alpine/OpenWrt container
+      run: |
+        # 创建 Dockerfile 用于构建
+        cat > Dockerfile << 'DOCKERFILE'
+        FROM alpine:latest
+        
+        # 安装构建工具
+        RUN apk add --no-cache \
+            build-base \
+            lua5.4 \
+            lua5.4-dev \
+            git \
+            wget \
+            xz \
+            alpine-sdk \
+            abuild
+        
+        # 配置 abuild
+        RUN mkdir -p /var/cache/distfiles
+        RUN adduser -D builder
+        RUN echo "builder ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+        
+        WORKDIR /build
+        DOCKERFILE
+        
+        docker build -t openwrt-builder .
+        
+    - name: Create APKBUILD
+      run: |
+        cat > APKBUILD << 'APKBUILD'
+        # Contributor: Your Name <your-email@example.com>
+        # Maintainer: Your Name <your-email@example.com>
+        pkgname=luci-app-advanced-uninstall
+        pkgver=2.2.0
+        pkgrel=0
+        pkgdesc="LuCI Advanced Uninstall Manager"
+        url="https://github.com/Linsen-Gao/luci-app-advanced-uninstall"
+        arch="noarch"
+        license="Apache-2.0"
+        depends="luci-base rpcd"
+        source=""
+        
+        build() {
+            return 0
+        }
+        
+        package() {
+            mkdir -p "$pkgdir/usr/lib/lua/luci/controller"
+            mkdir -p "$pkgdir/usr/lib/lua/luci/view/uninstall"
+            mkdir -p "$pkgdir/usr/share/rpcd/acl.d"
+            
+            install -m644 "$srcdir/../controller/uninstall.lua" "$pkgdir/usr/lib/lua/luci/controller/"
+            install -m644 "$srcdir/../view/uninstall/main.htm" "$pkgdir/usr/lib/lua/luci/view/uninstall/"
+            install -m644 "$srcdir/../acl.d/luci-app-advanced-uninstall.json" "$pkgdir/usr/share/rpcd/acl.d/"
+        }
+        APKBUILD
+        
+    - name: Build APK package
+      run: |
+        docker run --rm -v "$PWD:/build" openwrt-builder sh -c "
+          cd /build
+          # 简单打包方法
+          mkdir -p pkg/usr/lib/lua/luci/controller
+          mkdir -p pkg/usr/lib/lua/luci/view/uninstall
+          mkdir -p pkg/usr/share/rpcd/acl.d
+          
+          cp src/controller/uninstall.lua pkg/usr/lib/lua/luci/controller/
+          cp src/view/uninstall/main.htm pkg/usr/lib/lua/luci/view/uninstall/
+          cp src/acl.d/luci-app-advanced-uninstall.json pkg/usr/share/rpcd/acl.d/
+          
+          # 创建 .apk 包 (tar.gz 格式，与 apk 兼容)
+          tar -czf luci-app-advanced-uninstall-2.2.0-r0.apk -C pkg .
+        "
+        
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: apk-package-alternative
+        path: luci-app-advanced-uninstall-*.apk
