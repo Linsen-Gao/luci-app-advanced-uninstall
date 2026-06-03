@@ -26,9 +26,9 @@ endef
 
 define Build/Prepare
 	mkdir -p $(PKG_BUILD_DIR)
-	$(CP) ./controller $(PKG_BUILD_DIR)/
-	$(CP) ./view $(PKG_BUILD_DIR)/
-	$(CP) ./acl.d $(PKG_BUILD_DIR)/
+	$(CP) ./src/controller $(PKG_BUILD_DIR)/
+	$(CP) ./src/view $(PKG_BUILD_DIR)/
+	$(CP) ./src/acl.d $(PKG_BUILD_DIR)/
 endef
 
 define Build/Compile
@@ -44,8 +44,8 @@ define Package/$(PKG_NAME)/install
 	$(INSTALL_DIR) $(1)/usr/share/rpcd/acl.d
 	$(INSTALL_DATA) $(PKG_BUILD_DIR)/acl.d/luci-app-advanced-uninstall.json $(1)/usr/share/rpcd/acl.d/luci-app-advanced-uninstall.json
 
-t$(INSTALL_DIR) $(1)/usr/share/luci/menu.d
-t$(INSTALL_DATA) ./root/usr/share/luci/menu.d/luci-app-advanced-uninstall.json $(1)/usr/share/luci/menu.d/luci-app-advanced-uninstall.json
+$(INSTALL_DIR) $(1)/usr/share/luci/menu.d
+$(INSTALL_DATA) ./root/usr/share/luci/menu.d/luci-app-advanced-uninstall.json $(1)/usr/share/luci/menu.d/luci-app-advanced-uninstall.json
 endef
 
 define Package/$(PKG_NAME)/postinst

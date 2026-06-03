@@ -1,7 +1,17 @@
 {
-	"admin/system/advanced-uninstall": {
-		"title": "Package Uninstall",
-		"order": 90,
+	"admin/system/uninstall": {
+		"title": "高级卸载",
+		"order": 60,
+		"action": {
+			"type": "firstchild"
+		},
+		"depends": {
+			"acl": [ "luci-app-advanced-uninstall" ]
+		}
+	},
+	"admin/system/uninstall/manage": {
+		"title": "软件包管理",
+		"order": 10,
 		"action": {
 			"type": "view",
 			"path": "uninstall/main"
