@@ -43,6 +43,9 @@ define Package/$(PKG_NAME)/install
 	
 	$(INSTALL_DIR) $(1)/usr/share/rpcd/acl.d
 	$(INSTALL_DATA) $(PKG_BUILD_DIR)/acl.d/luci-app-advanced-uninstall.json $(1)/usr/share/rpcd/acl.d/luci-app-advanced-uninstall.json
+
+t$(INSTALL_DIR) $(1)/usr/share/luci/menu.d
+t$(INSTALL_DATA) ./root/usr/share/luci/menu.d/luci-app-advanced-uninstall.json $(1)/usr/share/luci/menu.d/luci-app-advanced-uninstall.json
 endef
 
 define Package/$(PKG_NAME)/postinst

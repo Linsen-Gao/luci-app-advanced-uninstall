@@ -1,0 +1,10 @@
+{
+	"luci-app-advanced-uninstall": {
+		"description": "Grant access to advanced uninstall",
+		"read": {
+			"cgi-io": [ "exec" ],
+			"ubus": [ "system" ]
+		},
+		"write": {}
+	}
+}
